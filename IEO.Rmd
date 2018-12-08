@@ -23,8 +23,8 @@ Pacf(IEO.ts)
 Acf(vol)
 Pacf(vol)
 
-train.ts <- window(IEO.ts, end = "2014-08-31")
-valid.ts <- window(IEO.ts, start = "2014-09-01")
+train.ts <- window(IEO.ts, end = "2015-12-31")
+valid.ts <- window(IEO.ts, start = "2016-01-01")
 ntrain <- length(train.ts)
 nvalid <- length(valid.ts)
 
@@ -40,7 +40,7 @@ abs(critical)<abs(teststat) #Not reject null, series has unit root
 # Arima Forecast
 ArimaMod <- auto.arima(train.ts, d=1, ic="bic", seasonal = FALSE)
 summary(ArimaMod)
-= <- Arima(valid.ts, model = ArimaMod)
+fcast_Arima<- Arima(valid.ts, model = ArimaMod)
 fcast_fitted_Arima <- xts(fcast_Arima$fitted, as.Date(IEO$Date[(ntrain+1):(ntrain+nvalid)]))
 mod_fitted_Arima <- xts(ArimaMod$fitted, as.Date(IEO$Date[1:ntrain]))
 
@@ -73,8 +73,8 @@ print(accuracy(filter.onestep$fitted, valid.ts))
 # Naive Forecast
 nALL <- length(IEO.ts)
 naiveFcast.ts <- lag(IEO.ts, 1)
-naiveTrain.ts <- window(naiveFcast.ts, end=("2014-08-31"))
-naiveValid.ts <- window(naiveFcast.ts, start =("2014-09-01"))
+naiveTrain.ts <- window(naiveFcast.ts, end=("2015-12-31"))
+naiveValid.ts <- window(naiveFcast.ts, start =("2016-01-01"))
 # plot
 plot(IEO.ts, main = 'Naive Forecast')
 lines(naiveTrain.ts,col = "blue")
@@ -105,8 +105,10 @@ Return<-diff(log(AGG$Adj.Close))
 head(Return)
 Date<-AGG[-1,1]
 bond.ts <- zoo(Return,as.Date(Date))
-bond.ts <- window(bond.ts,start=as.Date("2014-09-03"),end=as.Date("2018-12-04"))
-head(bond.ts)
+bond.ts <- window(bond.ts,start=as.Date("2016-01-01"))
+gepmetirc_return<-prod(1+as.vector(bond.ts))-1
+gepmetirc_return
+sd(Return)
 length(bond.ts)
 ```
 
@@ -119,8 +121,8 @@ rsp <- diff(log(IEO.ts))
 rsp<-rsp[-1,]
 head(rsp)
 
-train.ts <- window(rsp, end = "2014-08-31")
-valid.ts <- window(rsp, start = "2014-09-01")
+train.ts <- window(rsp, end = "2015-12-31")
+valid.ts <- window(rsp, start = "2016-01-01")
 ntrain <- length(train.ts)
 nvalid <- length(valid.ts)
 #GARCH Model in Training set
@@ -132,6 +134,7 @@ resid.ts  <- residuals(fittrain)
 setfixed(spec) <- as.list(coef(fittrain))
 ugarchfilter <- ugarchfilter(spec=spec,data=valid.ts)
 garchVolvalid.ts <- zoo(sigma(ugarchfilter))
+mean(garchVolvalid.ts)
 garchVolvalid.ts<-garchVolvalid.ts[-1,]
 plot(garchVolvalid.ts)
 length(garchVolvalid.ts)
@@ -140,6 +143,9 @@ length(garchVolvalid.ts)
 #set for 10 percent annual standard deviation
 target<-0.01
 weight <- target/garchVolvalid.ts
+weight
+weight[weight$x>1]=1
+weight
 length(weight)
 # constant portfolio benchmark
 mweight <- mean(weight)
@@ -147,6 +153,7 @@ mweight <- mean(weight)
 # dynamic daily portfolio 
 IEO_return<-diff(fcast_Arima$fitted)
 IEO_return
+gepmetirc_return<-prod(1+as.vector(IEO_return))-1
 length(IEO_return)
 pret  <-  as.vector(IEO_return*weight)  + as.vector(bond.ts*(1-weight))
 pretConstant <-  as.vector(IEO_return)*mweight  + as.vector(bond.ts)*(1-mweight)
@@ -171,7 +178,7 @@ print(cbind(mean(pretEquity),sd(pretEquity)))
 
 # Sharpe ratios
 print("Sharpe ratios (annualized)")
-print( (12*mean(pret)-0.03)/( sqrt(12)*sd(pret)))
-print( (12*mean(pretConstant)-0.03)/( sqrt(12)*sd(pretConstant)))       
-print( (12*mean(pretEquity)-0.03)/( sqrt(12)*sd(pretEquity)))       
+print( (12*mean(pret)-mean(as.vector(bond.ts)))/( sqrt(12)*sd(pret)))
+print( (12*mean(pretConstant)-mean(as.vector(bond.ts)))/( sqrt(12)*sd(pretConstant)))       
+print( (12*mean(pretEquity)-mean(as.vector(bond.ts)))/( sqrt(12)*sd(pretEquity)))       
 ```
