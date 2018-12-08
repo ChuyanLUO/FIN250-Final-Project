@@ -73,7 +73,9 @@ plot(IEO.ts, main = 'Naive Forecast')
 lines(naiveTrain.ts,col = "blue")
 lines(naiveValid.ts, col = "green")
 # RMSE
-(sqrt(mean((naiveTrain.ts-train.ts)^2, na.rm =TRUE)))
-(sqrt(mean((naiveValid.ts-valid.ts)^2, na.rm =TRUE)))
+naive.train.res <- naiveTrain.ts-train.ts
+naive.valid.res <- naiveValid.ts-valid.ts
+(sqrt(mean((naive.train.res)^2, na.rm =TRUE)))
+(sqrt(mean((naive.valid.res)^2, na.rm =TRUE)))
 
 ```
