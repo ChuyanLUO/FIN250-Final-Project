@@ -1,0 +1,85 @@
+---
+title: "Group"
+author: "Danyao Yu"
+date: "12/7/2018"
+output: html_document
+---
+```{r}
+library(forecast)
+library(zoo)
+library(tseries)
+setwd("~/Desktop/Brandeis/Class/Third Semester/Forcasting/Data")
+
+IEO<-read.csv("~/Desktop/Brandeis/Class/Third Semester/Forcasting/Data/IEO.csv")
+IEO.ts <- xts(IEO$Close, as.Date(IEO$Date))
+Acf(IEO.ts)
+plot(IEO.ts)
+
+IEO.train <- window(IEO.ts, end=("2015-12-31"))
+IEO.valid <- window(IEO.ts, start =("2016-01-01"))
+
+# Arima Forecast
+ArimaMod <- auto.arima(IEO.train, ic="bic", seasonal = FALSE)
+summary(ArimaMod)
+
+onestepahead <- Arima(IEO.valid, model = ArimaMod)
+plot(onestepahead$fitted)
+lines(IEO.valid, col="blue")
+grid()
+
+IEO.window <- window(onestepahead$fitted, start = 3000, end = 3100)
+valid.window <- window(IEO.valid, start=3000, end=3100)
+plot(IEO.window, col="red")
+lines(valid.window, col="black")
+grid()
+
+# Naive Forecast
+nALL <- length(IEO.ts)
+naiveFcast <- rep(0, nALL)
+for (t in 2:nALL) {
+  naiveFcast[t] <- IEO.ts[t-1]
+}
+naiveFcast.ts = ts(naiveFcast,start=1)
+
+naiveTrain.ts = window(naiveFcast.ts,end=2500)
+naiveValid.ts = window(naiveFcast.ts,start = 2501)
+plot(naiveFcast.ts)
+lines(IEO.ts,col = "green")
+Fcast.zoom <- window(naiveFcast.ts, start=3000, end = 3169)
+IEO.zoom <- window(IEO.ts, start = 3000, end = 3169)
+plot(Fcast.zoom)
+lines(IEO.zoom, col = "green")
+
+# Exponential Filter Forecast
+filter.mod <- ets(IEO.train,model='ANN')
+filter.fcast <- forecast(filter.mod,h=length(IEO.valid))
+
+plot(filter.fcast,xlim=c(2000,3000))
+lines(IEO.valid)
+
+# Naive model in Train sample
+print("Naive Model, Train sample")
+print(accuracy(naiveTrain.ts,IEO.train))
+# ARMA in Train sample
+print("ARMA Model, Train sample")
+print(accuracy(fitted(ArimaMod),IEO.train))
+# Expotential Filter in Train sample
+print("Expotentail Filter, Train sample")
+print(accuracy(fitted(filter.mod), IEO.train))
+
+# Naive model in validation sample
+print("Naive Model, validation sample")
+print(accuracy(naiveValid.ts,IEO.valid))
+# ARMA in validation sample
+print("ARMA, validation sample")
+print(accuracy(fitted(onestepahead),IEO.valid))
+# Expotential Filter in validation sample
+print("Expotential Filter, Valid sample")
+print(accuracy(filter.fcast$mean, IEO.valid))
+
+# Residual autocorrelation diagnostic
+Acf(ArimaMod$residuals)
+
+
+```
+
