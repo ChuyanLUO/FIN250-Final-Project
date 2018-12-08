@@ -6,6 +6,7 @@ output: html_document
 library(forecast)
 library(zoo)
 library(xts)
+library(urca)
 
 IEO<-read.csv("~/Documents/Fall 2018/Forecasting/R Codes/Data Sets/IEO.csv")
 IEO.ts <- xts(IEO$Adj.Close, as.Date(IEO$Date))
@@ -22,7 +23,26 @@ valid.ts <- window(IEO.ts, start = "2014-09-01")
 ntrain <- length(train.ts)
 nvalid <- length(valid.ts)
 
-fit <- auto.arima(train.ts,ic="bic")
-fcast <- Arima(valid.ts, model = fit)
-fcast.fitted <- xts(fcast$fitted, as.Date(IEO$Date[(ntrain+1):(ntrain+nvalid)]))
+#DF Test on Whole Data Set
+df.test <- ur.df(IEO.ts,type="trend",selectlags="BIC")
+print(summary(df.test))
+sum <- summary(df.test)
+teststat <- sum@teststat[3]
+# critical value at 5 percent
+critical <- sum@cval[3,2]
+abs(critical)<abs(teststat) #Not reject null, series has unit root
+
+# Arima Forecast
+ArimaMod <- auto.arima(train.ts, d=1, ic="bic", seasonal = FALSE)
+summary(ArimaMod)
+fcast_Arima <- Arima(valid.ts, model = ArimaMod)
+fcast_fitted_Arima <- xts(fcast_Arima$fitted, as.Date(IEO$Date[(ntrain+1):(ntrain+nvalid)]))
+mod_fitted_Arima <- xts(ArimaMod$fitted, as.Date(IEO$Date[1:ntrain]))
+
+print(accuracy(ArimaMod))
+print(accuracy(fcast_Arima$fitted, valid.ts))
+
+plot(IEO.ts, ylab="Price",xlab="Time",bty="l",ylim=c(0,100),main="Forecast of IEO Price(Arima(0,1,0))", flty=2)
+lines(mod_fitted_Arima, lwd=1,col="blue")
+lines(fcast_fitted_Arima, lwd=1,col="green")
 ```
