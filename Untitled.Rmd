@@ -1,0 +1,227 @@
+---
+  title: "Final Project"
+output: html_document
+---
+  ---
+  title: "Final Project"
+output: html_document
+---
+```{r}
+library(forecast)
+library(zoo)
+library(xts)
+library(urca)
+
+#IEO<-read.csv("~/Documents/Fall 2018/Forecasting/R Codes/Data Sets/IEO.csv")
+IEO<-read.csv("IEO.csv")
+Exxcon<-read.csv("~/Desktop/Exxon Mobil.csv")
+
+monagg <- function(data)
+{
+  data <- data[data$VOL!=0,]
+  # store all data from data into temp
+  temp <- tail(data,n=1)
+  m <- nrow(data)
+  # these are the three lines to really pay attention to
+  # Using vW index returns (changing to RET would move to IBM)
+  # first find std over month
+  temp$vol <- sd(data$vwretd)
+  # now return over month
+  temp$ret <- prod(1+data$vwretd)-1
+  temp$m <- m # number of days
+  # All these values can be negative if there are no trades 
+  data$PRC <- abs(data$PRC)
+  data$ASKHI <- abs(data$ASKHI)
+  data$BIDLO <- abs(data$BIDLO)
+  # bid/ask range (another sort of volatility estimate)
+  dailyvol <- (data$ASKHI-data$BIDLO)/(0.5*(data$ASKHI+data$BIDLO))
+  # remove data errors
+  dailyvol[dailyvol>1] <- 0
+  dailyturn <- data$VOL/data$SHROUT
+  # volatility relative to turnover
+  temp$liq  <- temp$vol/mean(dailyturn)
+  mturn <- mean(dailyturn)
+  # set to mean if zero
+  dailyturn[ dailyturn==0] <- mturn
+  temp$turn <- mean(dailyturn)
+  # return monthly record
+  temp
+}
+
+dateProc <- function(dateVec) 
+{
+  # strip out years
+  year<-trunc(dateVec/10000)
+  month = trunc((dateVec-year*10000)/100)
+  day = trunc(dateVec-year*10000-month*100)
+  strVec<-sprintf("%d-%d-%d",year,month,day)
+  dateOut = as.Date(strVec)
+  return(dateOut)
+}
+
+IEO.ts <- xts(log(IEO$Adj.Close), as.Date(IEO$Date))
+vol <- (diff(log(IEO.ts)))^2
+plot(IEO.ts)
+plot(vol)
+Acf(IEO.ts)
+Pacf(IEO.ts)
+Acf(vol)
+Pacf(vol)
+
+train.ts <- window(IEO.ts, end = "2015-12-31")
+valid.ts <- window(IEO.ts, start = "2016-01-01")
+ntrain <- length(train.ts)
+nvalid <- length(valid.ts)
+
+#DF Test on Whole Data Set
+df.test <- ur.df(IEO.ts,type="trend",selectlags="BIC")
+print(summary(df.test))
+sum <- summary(df.test)
+teststat <- sum@teststat[3]
+# critical value at 5 percent
+critical <- sum@cval[3,2]
+abs(critical)<abs(teststat) #Not reject null, series has unit root
+
+# Arima Forecast
+ArimaMod <- auto.arima(train.ts, d=1, ic="bic", seasonal = FALSE)
+summary(ArimaMod)
+fcast_Arima<- Arima(valid.ts, model = ArimaMod)
+fcast_fitted_Arima <- xts(fcast_Arima$fitted, as.Date(IEO$Date[(ntrain+1):(ntrain+nvalid)]))
+mod_fitted_Arima <- xts(ArimaMod$fitted, as.Date(IEO$Date[1:ntrain]))
+
+print(accuracy(ArimaMod))
+print(accuracy(fcast_Arima$fitted, valid.ts))
+
+plot(IEO.ts, ylab="Price",xlab="Time",bty="l",main="Forecast of IEO Price(Arima(0,1,0))", flty=2)
+lines(mod_fitted_Arima, lwd=1,col="blue")
+lines(fcast_fitted_Arima, lwd=1,col="green")
+```
+```{r}
+# Exponential Filter Forecast
+# First, estimate addiive trend filter
+filter.mod <- ets(train.ts, model = "AAN")
+# Now, build forecasts for validation periods (uses no data there)
+filter.pred <- forecast(filter.mod, h = nvalid)
+# Now, build one step ahead forecasts for validation data, using estimated model
+filter.onestep <- ets(valid.ts, model = filter.mod)
+filter.pred.fitted <- xts(filter.pred$fitted, as.Date(IEO$Date[1:ntrain]))
+filter.onestep.fitted <- xts(filter.onestep$fitted, as.Date(IEO$Date[(ntrain + 1):(ntrain + nvalid)]))
+# plot all the results
+plot(IEO.ts, main = "Filter Forecast (with trend)")
+lines(filter.pred.fitted, lwd = 1,col="blue", lty = 2)
+lines(filter.onestep.fitted,lwd = 1, col="green", lty = 2)
+# check accuracy
+print(accuracy(filter.pred, valid.ts))
+print(accuracy(filter.onestep$fitted, valid.ts))
+```
+```{r}
+# Naive Forecast
+nALL <- length(IEO.ts)
+naiveFcast.ts <- lag(IEO.ts, 1)
+naiveTrain.ts <- window(naiveFcast.ts, end=("2015-12-31"))
+naiveValid.ts <- window(naiveFcast.ts, start =("2016-01-01"))
+# plot
+plot(IEO.ts, main = 'Naive Forecast')
+lines(naiveTrain.ts,col = "blue")
+lines(naiveValid.ts, col = "green")
+# RMSE
+naive.train.res <- naiveTrain.ts-train.ts
+naive.valid.res <- naiveValid.ts-valid.ts
+(rmse_train <- sqrt(mean((naive.train.res)^2, na.rm =TRUE)))
+(rmse_valid <- sqrt(mean((naive.valid.res)^2, na.rm =TRUE)))
+```
+```{r}
+# perform some Diebold/Mariano tests
+print("Diebold/Mariano ARIMA versus Naive")
+print(dm.test(residuals(fcast_Arima),naive.valid.res))
+
+print("Diebold/Mariano Exponential Filter versus Naive")
+print(dm.test(residuals(filter.onestep),naive.valid.res))
+
+print("Diebold/Mariano ARIMA versus Exponential Filter")
+print(dm.test(residuals(fcast_Arima),residuals(filter.onestep)))
+```
+
+
+```{r}
+#AGG ETF
+AGG<-read.csv("~/Desktop/SHY.csv")
+Return<-diff(log(AGG$Adj.Close))
+head(Return)
+Date<-AGG[-1,1]
+bond.ts <- zoo(Return,as.Date(Date))
+bond.ts <- window(bond.ts,start=as.Date("2006-01-05"),end = as.Date("2018-12-04"))
+gepmetirc_return<-prod(1+as.vector(bond.ts))-1
+sd(Return)
+length(bond.ts)
+```
+
+```{r}
+#Volality
+#IEO ETF
+IEO<-read.csv("IEO.csv")
+IEO.ts <- xts(IEO$Adj.Close, as.Date(IEO$Date))
+rsp <- diff(log(IEO.ts))
+rsp<-rsp[-1,]
+head(rsp)
+
+train.ts <- window(rsp, end = "2015-12-31")
+valid.ts <- window(rsp, start = "2016-01-01")
+ntrain <- length(train.ts)
+nvalid <- length(valid.ts)
+#GARCH Model in Training set
+spec <- ugarchspec(variance.model=list(model="sGARCH",garchOrder=c(1,1)),
+                   mean.model=list(include.mean=T,armaOrder=c(0,0)))
+fittrain <- ugarchfit(spec = spec, data=train.ts)
+resid.ts  <- residuals(fittrain)
+#Forecasting Volatility in Validation set
+setfixed(spec) <- as.list(coef(fittrain))
+ugarchfilter <- ugarchfilter(spec=spec,data=valid.ts)
+garchVolvalid.ts <- zoo(sigma(ugarchfilter))
+mean(garchVolvalid.ts)
+garchVolvalid.ts<-garchVolvalid.ts[-1,]
+plot(garchVolvalid.ts)
+length(garchVolvalid.ts)
+
+#Build Strategy
+#set for 10 percent annual standard deviation
+target<-0.01
+weight <- target/garchVolvalid.ts
+weight
+weight[weight$x>1]=1
+weight
+length(weight)
+# constant portfolio benchmark
+mweight <- mean(weight)
+
+# dynamic daily portfolio 
+IEO_return<-diff(fcast_Arima$fitted)
+IEO_return
+gepmetirc_return<-prod(1+as.vector(IEO_return))-1
+length(IEO_return)
+pret  <-  as.vector(IEO_return*weight)  + as.vector(bond.ts*(1-weight))
+pretConstant <-  as.vector(IEO_return)*mweight  + as.vector(bond.ts)*(1-mweight)
+pretEquity   <- as.vector(IEO_return)
+
+# Volatility for portfolios (adjust for days of the month)
+pstd  <-  as.vector(garchVolvalid.ts*weight)
+pstdConstant <-  as.vector(garchVolvalid.ts)*mweight
+pstdEquity   <- as.vector(garchVolvalid.ts)
+
+# Look at the variability of returns around volatility targets
+print("Standard deviations and sd(standard deviations)")
+print(cbind(mean(pstd),sd(pstd)))
+print(cbind(mean(pstdConstant),sd(pstdConstant)))
+print(cbind(mean(pstdEquity),sd(pstdEquity)))
+
+# General mean and return for returns (annualized)           
+print("mean and standard deviations for returns (annualized)") 
+print(cbind(mean(pret),sd(pretConstant)))
+print(cbind(mean(pretConstant),sd(pretConstant)))
+print(cbind(mean(pretEquity),sd(pretEquity)))
+
+print("Sharpe ratios (annualized)")
+print( (252*mean(pret)-0.03)/( sqrt(252)*sd(pret)))
+print( (252*mean(pretConstant)-0.03)/( sqrt(252)*sd(pretConstant)))       
+print( (252*mean(pretEquity)-0.03)/( sqrt(252)*sd(pretEquity)))      
+```
