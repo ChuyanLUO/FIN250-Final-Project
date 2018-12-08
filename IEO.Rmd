@@ -5,22 +5,23 @@ output: html_document
 ```{r}
 library(forecast)
 library(zoo)
-
-```{r}
-library(forecast)
-library(zoo)
 library(xts)
 
-IEO<-read.csv("~/Desktop/Brandeis/Class/Third Semester/Forcasting/Data/IEO.csv")
+IEO<-read.csv("~/Documents/Fall 2018/Forecasting/R Codes/Data Sets/IEO.csv")
 IEO.ts <- xts(IEO$Adj.Close, as.Date(IEO$Date))
-ret <- diff(log(IEO.ts))
+vol <- (diff(log(IEO.ts)))^2
 plot(IEO.ts)
-plot(ret^2)
+plot(vol)
+Acf(IEO.ts)
+Pacf(IEO.ts)
+Acf(vol)
+Pacf(vol)
 
 train.ts <- window(IEO.ts, end = "2014-08-31")
 valid.ts <- window(IEO.ts, start = "2014-09-01")
 ntrain <- length(train.ts)
 nvalid <- length(valid.ts)
+
 fit <- auto.arima(train.ts,ic="bic")
 fcast <- Arima(valid.ts, model = fit)
 fcast.fitted <- xts(fcast$fitted, as.Date(IEO$Date[(ntrain+1):(ntrain+nvalid)]))
