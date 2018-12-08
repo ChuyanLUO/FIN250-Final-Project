@@ -13,7 +13,7 @@ library(xts)
 library(urca)
 
 #IEO<-read.csv("~/Documents/Fall 2018/Forecasting/R Codes/Data Sets/IEO.csv")
-IEO<-read.csv("~/Github/FIN250-Final-Project/IEO.csv")
+IEO<-read.csv("IEO.csv")
 IEO.ts <- xts(log(IEO$Adj.Close), as.Date(IEO$Date))
 vol <- (diff(log(IEO.ts)))^2
 plot(IEO.ts)
@@ -40,7 +40,7 @@ abs(critical)<abs(teststat) #Not reject null, series has unit root
 # Arima Forecast
 ArimaMod <- auto.arima(train.ts, d=1, ic="bic", seasonal = FALSE)
 summary(ArimaMod)
-fcast_Arima <- Arima(valid.ts, model = ArimaMod)
+= <- Arima(valid.ts, model = ArimaMod)
 fcast_fitted_Arima <- xts(fcast_Arima$fitted, as.Date(IEO$Date[(ntrain+1):(ntrain+nvalid)]))
 mod_fitted_Arima <- xts(ArimaMod$fitted, as.Date(IEO$Date[1:ntrain]))
 
@@ -99,132 +99,63 @@ print(dm.test(residuals(fcast_Arima),residuals(filter.onestep)))
 
 
 ```{r}
-# Model code for processing
-# CRSP individual stock data + Index information
-# Mostly for aggregating to monthly
-# Clear variables
+#AGG ETF
+AGG<-read.csv("AGG.csv")
+Return<-diff(log(AGG$Adj.Close))
+head(Return)
+Date<-AGG[-1,1]
+bond.ts <- zoo(Return,as.Date(Date))
+bond.ts <- window(bond.ts,start=as.Date("2014-09-03"),end=as.Date("2018-12-04"))
+head(bond.ts)
+length(bond.ts)
+```
 
-# aggregate data over months
-# volume now becomes mean daily volume by $
-monagg <- function(data)
-{
-  data <- data[data$VOL!= 0,]
-  # store all data from data into temp
-  temp <- tail(data,n = 1)
-  m <- nrow(data)
-  # these are the three lines to really pay attention to
-  # Using vW index returns (changing to RET would move to IBM)
-  # first find std over month
-  temp$vol <- sd(data$vwretd)
-  # now return over month
-  temp$ret <- prod(1 + data$vwretd) - 1
-  temp$m <- m # number of days
-  # All these values can be negative if there are no trades 
-  data$PRC <- abs(data$PRC)
-  data$ASKHI <- abs(data$ASKHI)
-  data$BIDLO <- abs(data$BIDLO)
-  # bid/ask range (another sort of volatility estimate)
-  dailyvol <- (data$ASKHI - data$BIDLO)/(0.5*(data$ASKHI + data$BIDLO))
-  # remove data errors
-  dailyvol[dailyvol > 1] <- 0
-  dailyturn <- data$VOL/data$SHROUT
-  # volatility relative to turnover
-  temp$liq  <- temp$vol/mean(dailyturn)
-  mturn <- mean(dailyturn)
-  # set to mean if zero
-  dailyturn[ dailyturn == 0] <- mturn
-  temp$turn <- mean(dailyturn)
-  # return monthly record
-  temp
-}
+```{r}
+#Volality
+#IEO ETF
+IEO<-read.csv("IEO.csv")
+IEO.ts <- xts(IEO$Adj.Close, as.Date(IEO$Date))
+rsp <- diff(log(IEO.ts))
+rsp<-rsp[-1,]
+head(rsp)
 
-dateProc <- function(dateVec) 
-{
-  # strip out years
-  year<-trunc(dateVec/10000)
-  month = trunc((dateVec-year*10000)/100)
-  day = trunc(dateVec-year*10000-month*100)
-  strVec<-sprintf("%d-%d-%d",year,month,day)
-  dateOut = as.Date(strVec)
-  return(dateOut)
-}
+train.ts <- window(rsp, end = "2014-08-31")
+valid.ts <- window(rsp, start = "2014-09-01")
+ntrain <- length(train.ts)
+nvalid <- length(valid.ts)
+#GARCH Model in Training set
+spec <- ugarchspec(variance.model=list(model="sGARCH",garchOrder=c(1,1)),
+                   mean.model=list(include.mean=T,armaOrder=c(0,0)))
+fittrain <- ugarchfit(spec = spec, data=train.ts)
+resid.ts  <- residuals(fittrain)
+#Forecasting Volatility in Validation set
+setfixed(spec) <- as.list(coef(fittrain))
+ugarchfilter <- ugarchfilter(spec=spec,data=valid.ts)
+garchVolvalid.ts <- zoo(sigma(ugarchfilter))
+garchVolvalid.ts<-garchVolvalid.ts[-1,]
+plot(garchVolvalid.ts)
+length(garchVolvalid.ts)
 
-
-# read in raw crsp dowload - This is a long range daily series of IBMreturns
-# and CRSP value weighted returns
-#  It also include some volume series as well as high/low range information
-allDay <- read.csv("ibmCRSP3.csv", header=TRUE, colClasses=c("numeric"))
-
-# This is an R dataframe
-# eliminate some fields that are not used
-allDay$PERMNO <- NULL
-allDay$NUMTRD <- NULL
-allDay <- allDay[-1,]
-# restrict to cases with all data fields
-allDay <- allDay[complete.cases(allDay),]
-
-# Convert CRSP date
-allDay$rdate <- dateProc(allDay$date)
-# set up monthly key
-allDay$key <-as.numeric(format(allDay$rdate,"%Y"))*100+as.numeric(format(allDay$rdate,"%m"))
-
-# use plyr to apply dayAgg by each date
-volMonth <- ddply(allDay,.variables = "key",.fun = monagg)
-
-
-# volLR <- rollmean(volMonth$vol,6, align="right",fill=mean(volMonth$vol))
-# 6 month volatility model
-volLR <- ma(volMonth$vol,order=6, centre=FALSE)
-
-rv.ts  <- ts(volMonth$vol,start=c(1926,1),freq=12)
-rvLR.ts <- ts(volLR, start=c(1926,1),freq=12)
-ret.ts <- ts(volMonth$ret,start=c(1926,1),freq=12)
-m.ts   <- ts(volMonth$m,start=c(1926,1),freq=12)
-
-rvtrain.ts <- window(rv.ts,end=c(2008,10))
-rvtest.ts  <- window(rv.ts,start=c(2008,11))
-
-
-
-# Several AR models with extensions (ARMAX models)
-
-lagvol = cbind(rv.ts,lag(rv.ts,-1,na.pad=TRUE),lag(rvLR.ts,-2,na.pad=TRUE), lag((ret.ts),-1,na.pad=TRUE), ret.ts, m.ts)
-colnames(lagvol) <- c("vol", "volL1", "volL2", "retL", "ret", "m")
-
-lagvol <- window(lagvol,end=c(2016,12))
-
-lagvolTrain <- window(lagvol,end=c(1990,12))
-lagvolValid <- window(lagvol,start=c(1991,1))
-
-# Use basic model + leverage effect term
-volTrain.mod <- lm(vol ~ volL1 + volL2 + retL,data=lagvolTrain)
-print(summary(volTrain.mod))
-
-# Build valid sample volatility forecast
-vol.fcast <- predict( volTrain.mod, lagvolValid)
-# Adjust this to monthly value (daily -> monthly)
-vol.fcast <- sqrt(lagvolValid[,6])*vol.fcast
-# set for 10 percent annual standard deviation
-target <- 0.10/sqrt(12)
-# now portfolio weight vector
-weight <- target/vol.fcast
+#Build Strategy
+#set for 10 percent annual standard deviation
+target<-0.01
+weight <- target/garchVolvalid.ts
+length(weight)
 # constant portfolio benchmark
 mweight <- mean(weight)
 
-# dynamic monthly portfolio (assuming 3 percent/year interest)
-pret  <-  lagvolValid[,5]*weight  + 0.03/12.*(1-weight)
-pretConstant <-  lagvolValid[,5]*mweight + 0.03/12 *(1-mweight)
-pretEquity   <-  lagvolValid[,5]* 1
+# dynamic daily portfolio 
+IEO_return<-diff(fcast_Arima$fitted)
+IEO_return
+length(IEO_return)
+pret  <-  as.vector(IEO_return*weight)  + as.vector(bond.ts*(1-weight))
+pretConstant <-  as.vector(IEO_return)*mweight  + as.vector(bond.ts)*(1-mweight)
+pretEquity   <- as.vector(IEO_return)
 
 # Volatility for portfolios (adjust for days of the month)
-pstd  <-  sqrt(lagvolValid[,6])*lagvolValid[,1]*weight
-pstdConstant <-  sqrt(lagvolValid[,6])*lagvolValid[,1]*mweight
-pstdEquity   <-  sqrt(lagvolValid[,6])*lagvolValid[,1]*1
-
-# Convert to annual values (like target)
-pstd         <- sqrt(12)*pstd
-pstdConstant <- sqrt(12)*pstdConstant
-pstdEquity   <- sqrt(12)*pstdEquity
+pstd  <-  as.vector(garchVolvalid.ts*weight)
+pstdConstant <-  as.vector(garchVolvalid.ts)*mweight
+pstdEquity   <- as.vector(garchVolvalid.ts)
 
 # Look at the variability of returns around volatility targets
 print("Standard deviations and sd(standard deviations)")
@@ -233,18 +164,14 @@ print(cbind(mean(pstdConstant),sd(pstdConstant)))
 print(cbind(mean(pstdEquity),sd(pstdEquity)))
  
 # General mean and return for returns (annualized)           
-print("mean and standard deviations for returns (annualized)")            
-print(cbind(12*mean(pret),sqrt(12)*sd(pret)))
-print(cbind(12*mean(pretConstant),sqrt(12)*sd(pretConstant)))
-print(cbind(12*mean(pretEquity),sqrt(12)*sd(pretEquity)))
+print("mean and standard deviations for returns (annualized)") 
+print(cbind(mean(pret),sd(pretConstant)))
+print(cbind(mean(pretConstant),sd(pretConstant)))
+print(cbind(mean(pretEquity),sd(pretEquity)))
 
 # Sharpe ratios
 print("Sharpe ratios (annualized)")
 print( (12*mean(pret)-0.03)/( sqrt(12)*sd(pret)))
 print( (12*mean(pretConstant)-0.03)/( sqrt(12)*sd(pretConstant)))       
 print( (12*mean(pretEquity)-0.03)/( sqrt(12)*sd(pretEquity)))       
-
-plot(pstd,ylim=c(0,0.8),xlab="year",ylab="annualized std")
-lines(pstdEquity,col="red")
-grid()
 ```
