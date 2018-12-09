@@ -176,3 +176,27 @@ print( (252*mean(pret)-0.03)/( sqrt(252)*sd(pret)))
 print( (252*mean(pretConstant)-0.03)/( sqrt(252)*sd(pretConstant)))       
 print( (252*mean(pretEquity)-0.03)/( sqrt(252)*sd(pretEquity)))      
 ```
+
+```{r}
+monagg <- function(data)
+{
+  temp <- tail(data,n=1)
+  m <- nrow(data)
+  # these are the three lines to really pay attention to
+  temp$ret <- prod(1+data$V1)-1
+  temp$m <- m # number of days
+  # return monthly record
+  temp
+}
+
+stockDailyReturn <- as.data.frame(diff(log(fcast_fitted_Arima)))
+stockDailyReturn$date <- rownames(stockDailyReturn)
+stockDailyReturn$key <-as.numeric(format(as.Date(stockDailyReturn$date),"%Y"))*100+as.numeric(format(as.Date(stockDailyReturn$date),"%m"))
+# use plyr to apply dayAgg by each date
+stockMonth <- ddply(stockDailyReturn,.variables = "key",.fun = monagg)
+
+bondDailyReturn <- as.data.frame(bond.ts)
+bondDailyReturn$date <- rownames(bondDailyReturn)
+bondDailyReturn$key <-as.numeric(format(as.Date(bondDailyReturn$date),"%Y"))*100+as.numeric(format(as.Date(bondDailyReturn$date),"%m"))
+bondMonth <- ddply(bondDailyReturn,.variables = "key",.fun = monagg)
+```
