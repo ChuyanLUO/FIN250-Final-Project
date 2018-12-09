@@ -11,26 +11,25 @@ library(forecast)
 library(zoo)
 library(xts)
 library(urca)
-
-sp500 <- read.csv("sp500Daily.csv")
-
-sp500.ts <- xts(log(sp500$Adj.Close), as.Date(sp500$Date,format = "%m/%d/%Y"))
-
-vol <- (diff(log(sp500.ts)))^2
-plot(sp500.ts)
+library(plyr)
+#IEO<-read.csv("~/Documents/Fall 2018/Forecasting/R Codes/Data Sets/IEO.csv")
+IEO<-read.csv("IEO.csv")
+IEO.ts <- xts(IEO$Adj.Close, as.Date(IEO$Date))
+vol <- (diff(log(IEO.ts)))^2
+plot(IEO.ts)
 plot(vol)
-Acf(sp500.ts)
-Pacf(sp500.ts)
+plot(vol**0.5)
+Pacf(IEO.ts)
 Acf(vol)
 Pacf(vol)
 
-train.ts <- window(sp500.ts, end = "2004-12-31")
-valid.ts <- window(sp500.ts, start = "2005-01-01")
+train.ts <- window(IEO.ts, end = "2015-12-31")
+valid.ts <- window(IEO.ts, start = "2016-01-01")
 ntrain <- length(train.ts)
 nvalid <- length(valid.ts)
 
 #DF Test on Whole Data Set
-df.test <- ur.df(sp500.ts,type="trend",selectlags="BIC")
+df.test <- ur.df(IEO.ts,type="trend",selectlags="BIC")
 print(summary(df.test))
 sum <- summary(df.test)
 teststat <- sum@teststat[3]
@@ -42,13 +41,13 @@ abs(critical)<abs(teststat) #Not reject null, series has unit root
 ArimaMod <- auto.arima(train.ts, d=1, ic="bic", seasonal = FALSE)
 summary(ArimaMod)
 fcast_Arima<- Arima(valid.ts, model = ArimaMod)
-fcast_fitted_Arima <- xts(fcast_Arima$fitted, as.Date(sp500$Date[(ntrain+1):(ntrain+nvalid)], format = "%m/%d/%Y"))
-mod_fitted_Arima <- xts(ArimaMod$fitted, as.Date(sp500$Date[1:ntrain], format = "%m/%d/%Y"))
+fcast_fitted_Arima <- xts(fcast_Arima$fitted, as.Date(IEO$Date[(ntrain+1):(ntrain+nvalid)]))
+mod_fitted_Arima <- xts(ArimaMod$fitted, as.Date(IEO$Date[1:ntrain]))
 
 print(accuracy(ArimaMod))
 print(accuracy(fcast_Arima$fitted, valid.ts))
 
-plot(sp500.ts, ylab="Price",xlab="Time",bty="l",main="Forecast of sp500 Price(Arima(1,1,1))", flty=2)
+plot(IEO.ts, ylab="Price",xlab="Time",bty="l",main="Forecast of IEO Price(Arima(0,1,0))", flty=2)
 lines(mod_fitted_Arima, lwd=1,col="blue")
 lines(fcast_fitted_Arima, lwd=1,col="green")
 ```
@@ -60,10 +59,10 @@ filter.mod <- ets(train.ts, model = "AAN")
 filter.pred <- forecast(filter.mod, h = nvalid)
 # Now, build one step ahead forecasts for validation data, using estimated model
 filter.onestep <- ets(valid.ts, model = filter.mod)
-filter.pred.fitted <- xts(filter.pred$fitted, as.Date(sp500$Date[1:ntrain],format = "%m/%d/%Y"))
-filter.onestep.fitted <- xts(filter.onestep$fitted, as.Date(sp500$Date[(ntrain + 1):(ntrain + nvalid)], format = "%m/%d/%Y"))
+filter.pred.fitted <- xts(filter.pred$fitted, as.Date(IEO$Date[1:ntrain]))
+filter.onestep.fitted <- xts(filter.onestep$fitted, as.Date(IEO$Date[(ntrain + 1):(ntrain + nvalid)]))
 # plot all the results
-plot(sp500.ts, main = "Filter Forecast (with trend)")
+plot(IEO.ts, main = "Filter Forecast (with trend)")
 lines(filter.pred.fitted, lwd = 1,col="blue", lty = 2)
 lines(filter.onestep.fitted,lwd = 1, col="green", lty = 2)
 # check accuracy
@@ -72,12 +71,12 @@ print(accuracy(filter.onestep$fitted, valid.ts))
 ```
 ```{r}
 # Naive Forecast
-nALL <- length(sp500.ts)
-naiveFcast.ts <- lag(sp500.ts, 1)
-naiveTrain.ts <- window(naiveFcast.ts, end="2004-12-31")
-naiveValid.ts <- window(naiveFcast.ts, start ="2005-01-01")
+nALL <- length(IEO.ts)
+naiveFcast.ts <- lag(IEO.ts, 1)
+naiveTrain.ts <- window(naiveFcast.ts, end=("2015-12-31"))
+naiveValid.ts <- window(naiveFcast.ts, start =("2016-01-01"))
 # plot
-plot(sp500.ts, main = 'Naive Forecast')
+plot(IEO.ts, main = 'Naive Forecast')
 lines(naiveTrain.ts,col = "blue")
 lines(naiveValid.ts, col = "green")
 # RMSE
@@ -100,31 +99,33 @@ print(dm.test(residuals(fcast_Arima),residuals(filter.onestep)))
 
 
 ```{r}
-#SHY ETF
-SHY<-read.csv("SHY.csv")
-Return<-diff(log(SHY$Adj.Close))
+#AGG ETF
+AGG<-read.csv("AGG.csv")
+Return<-diff(log(AGG$Adj.Close))
 head(Return)
-Date<-SHY[-1,1]
+Date<-AGG[-1,1]
 bond.ts <- zoo(Return,as.Date(Date))
-bond.ts <- window(bond.ts,start=as.Date("2006-01-05"),end = as.Date("2018-12-04"))
+bond.ts <- window(bond.ts,start=as.Date("2016-01-05"),end = as.Date("2018-12-04"))
+plot(bond.ts)
 gepmetirc_return<-prod(1+as.vector(bond.ts))-1
-sd(Return)
+gepmetirc_return
 length(bond.ts)
 ```
 
 ```{r}
 #Volality
-#sp500 ETF
+#IEO ETF
 
-rsp <- diff(log(sp500.ts))
+rsp <- diff(log(IEO.ts))
 rsp<-rsp[-1,]
 head(rsp)
+train.ts <- window(rsp, end = "2015-12-31")
+valid.ts <- window(rsp, start = "2016-01-01")
 
 #GARCH Model in Training set
 spec <- ugarchspec(variance.model=list(model="sGARCH",garchOrder=c(1,1)),
                    mean.model=list(include.mean=T,armaOrder=c(0,0)))
 fittrain <- ugarchfit(spec = spec, data=train.ts)
-resid.ts  <- residuals(fittrain)
 #Forecasting Volatility in Validation set
 setfixed(spec) <- as.list(coef(fittrain))
 ugarchfilter <- ugarchfilter(spec=spec,data=valid.ts)
@@ -146,13 +147,12 @@ length(weight)
 mweight <- mean(weight)
 
 # dynamic daily portfolio 
-sp500_return<-diff(filter.onestep$fitted)
-sp500_return
-gepmetirc_return<-prod(1+as.vector(sp500_return))-1
-length(sp500_return)
-pret  <-  as.vector(sp500_return*weight)  + as.vector(bond.ts*(1-weight))
-pretConstant <-  as.vector(sp500_return)*mweight  + as.vector(bond.ts)*(1-mweight)
-pretEquity   <- as.vector(sp500_return)
+IEO_return<-diff(fcast_Arima$fitted)
+IEO_return
+length(IEO_return)
+pret  <-  as.vector(IEO_return)*weight  + as.vector(bond.ts)*(1-weight)
+pretConstant <-  as.vector(IEO_return)*mweight  + as.vector(bond.ts)*(1-mweight)
+pretEquity   <- as.vector(IEO_return)
 
 # Volatility for portfolios (adjust for days of the month)
 pstd  <-  as.vector(garchVolvalid.ts*weight)
@@ -171,9 +171,8 @@ print(cbind(mean(pret),sd(pretConstant)))
 print(cbind(mean(pretConstant),sd(pretConstant)))
 print(cbind(mean(pretEquity),sd(pretEquity)))
 
-# Sharpe ratios
 print("Sharpe ratios (annualized)")
-print( (12*mean(pret)-mean(as.vector(bond.ts)))/( sqrt(12)*sd(pret)))
-print( (12*mean(pretConstant)-mean(as.vector(bond.ts)))/( sqrt(12)*sd(pretConstant)))       
-print( (12*mean(pretEquity)-mean(as.vector(bond.ts)))/( sqrt(12)*sd(pretEquity)))       
+print( (252*mean(pret)-0.03)/( sqrt(252)*sd(pret)))
+print( (252*mean(pretConstant)-0.03)/( sqrt(252)*sd(pretConstant)))       
+print( (252*mean(pretEquity)-0.03)/( sqrt(252)*sd(pretEquity)))      
 ```
