@@ -161,12 +161,12 @@ valid.ts <- window(rsp, start = "2016-01-01")
 ntrain <- length(train.ts)
 nvalid <- length(valid.ts)
 
-#GARCH Model in Training set
+# GARCH Model in Training set
 spec <- ugarchspec(variance.model=list(model="sGARCH",garchOrder=c(1,1)),
                    mean.model=list(include.mean=T,armaOrder=c(0,0)))
 fittrain <- ugarchfit(spec = spec, data=train.ts)
 
-#Forecasting Volatility in Validation set
+# Forecasting Volatility in Validation set
 setfixed(spec) <- as.list(coef(fittrain))
 ugarchfilter <- ugarchfilter(spec=spec,data=valid.ts)
 # fitted volatility
@@ -253,22 +253,30 @@ mean(pretEquity.month$sd,na.rm = TRUE)*sqrt(12)
 # Compare annualized mean, standard deviation and sharp ratio for three strategies 
 A.return <- rep(NA,3)
 A.volatility<-rep(NA,3)
-A.sharp_ratio<-rep(NA,3)
+A.sharpe_ratio<-rep(NA,3)
 A.return[1] <- mean(pret.month$ret)*12
 A.return[2] <- mean(pretConstant.month$ret)*12
 A.return[3]  <- mean(pretEquity.month$ret)*12
 A.volatility[1]<-mean(pret.month$sd,na.rm = TRUE)*sqrt(12)
 A.volatility[2]<-mean(pretConstant.month$sd,na.rm = TRUE)*sqrt(12)
 A.volatility[3]<-mean(pretEquity.month$sd,na.rm = TRUE)*sqrt(12)
-A.sharp_ratio[1]<-(mean(pret.month$ret)*12-0.03)/(mean(pret.month$sd,na.rm = TRUE)*sqrt(12))
-A.sharp_ratio[2]<-(mean(pretConstant.month$ret)*12-0.03)/(mean(pretConstant.month$sd,na.rm = TRUE)*sqrt(12))
+A.sharpe_ratio[1]<-(mean(pret.month$ret)*12-0.03)/(mean(pret.month$sd,na.rm = TRUE)*sqrt(12))
+A.sharpe_ratio[2]<-(mean(pretConstant.month$ret)*12-0.03)/(mean(pretConstant.month$sd,na.rm = TRUE)*sqrt(12))
 A.sharp_ratio[3]<-(mean(pretEquity.month$ret)*12-0.03)/(mean(pretEquity.month$sd,na.rm = TRUE)*sqrt(12))
 
 
 a<-data.frame(A.return=A.return,
               A.volatility=A.volatility,
-              A.sharp_ratio=A.sharp_ratio,
+              A.sharpe_ratio=A.sharp_ratio,
            row.names = c("Dynamic Strategy", "Constant Strategy","Whole Equity Strategy"))
 print(a)
 
 ```
+
+Above is a graph shows out of sample one step ahead GARCH volatility forecast.
+# Dynamic Strategy
+We built a portfolio using two ETF: iShares US Oil & Gas Explor & Prod ETF(IEO), and iShares Core U.S. Aggregate Bond ETF(AGG).
+In this strategy, GARCH fitted volatility was used as an estimate of next day's volatility to adjust the daily weight. We set 1 percent as the daily volatility target. To be more specific, the weight of the IEO ETF was calculated using the ratio of the volatility target to the out of sample one step ahead GARCH volatility estimated value. And the weights of the assets was rebalanced on a daily frequency. Additionally, we added a constraint that the maximum weight of IEO is one, which means short is not allowed in this portfolio.
+
+To evaluate the performance of the dynamic strategy, we created a monthly aggregation function to calculate the monthly return and monthly volatility.
+The dynamic strategy achieved a 5.175% annualized return in the validation period (from 2016-01-01), and the Sharpe ratio is 0.6884. The Dynamic strategy shows a better performance compared with the constant strategy and the whole equity strategy: its Sharpe ratio is 99.42% higher than the constant strategy and 53.46% higher than the whole equity strategy.
