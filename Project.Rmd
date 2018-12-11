@@ -12,7 +12,6 @@ library(zoo)
 library(xts)
 library(urca)
 library(ggplot2)
-
 #IEO is an oil exploitation ETF, frequently trading
 IEO<-read.csv("IEO.csv")
 #Make IEO time series
@@ -219,11 +218,13 @@ pret.month <- as.data.frame(pret.ts)
 pret.month$date <- rownames(pret.month)
 pret.month$key <-as.numeric(format(as.Date(pret.month$date),"%Y"))*100+as.numeric(format(as.Date(pret.month$date),"%m"))
 pret.month<-pret.month[-1,]
+
 pret.month <- ddply(pret.month,.variables = "key",.fun = monagg)
 #mean annualized return
 mean(pret.month$ret)*12
 #mean annualized standard deviation
-mean(pret.month$sd)*sqrt(12)
+mean(pret.month$sd,na.rm = TRUE)*sqrt(12)
+
 
 # Monthly Aggregate Return for Constant Strategy
 pretConstant.ts <- xts(pretConstant, as.Date(IEO$Date[(ntrain+2):(ntrain+nvalid)]))
@@ -235,7 +236,7 @@ pretConstant.month <- ddply(pretConstant.month,.variables = "key",.fun = monagg)
 #mean annualized return
 mean(pretConstant.month$ret)*12
 #mean annualized standard deviation
-mean(pretConstant.month$sd)*sqrt(12)
+mean(pretConstant.month$sd,na.rm = TRUE)*sqrt(12)
 
 # Monthly Aggregate Return for Whole ETF
 pretEquity.ts <- xts(pretEquity, as.Date(IEO$Date[(ntrain+2):(ntrain+nvalid)]))
@@ -247,7 +248,7 @@ pretEquity.month <- ddply(pretEquity.month,.variables = "key",.fun = monagg)
 #mean annualized return
 mean(pretEquity.month$ret)*12
 #mean annualized standard deviation
-mean(pretEquity.month$sd)*sqrt(12)
+mean(pretEquity.month$sd,na.rm = TRUE)*sqrt(12)
 
 # Compare annualized mean, standard deviation and sharp ratio for three strategies 
 A.return <- rep(NA,3)
@@ -256,12 +257,12 @@ A.sharp_ratio<-rep(NA,3)
 A.return[1] <- mean(pret.month$ret)*12
 A.return[2] <- mean(pretConstant.month$ret)*12
 A.return[3]  <- mean(pretEquity.month$ret)*12
-A.volatility[1]<-mean(pret.month$sd)*sqrt(12)
-A.volatility[2]<-mean(pretConstant.month$sd)*sqrt(12)
-A.volatility[3]<-mean(pretEquity.month$sd)*sqrt(12)
-A.sharp_ratio[1]<-(mean(pret.month$ret)*12-0.03)/(mean(pret.month$sd)*sqrt(12))
-A.sharp_ratio[2]<-(mean(pretConstant.month$ret)*12-0.03)/(mean(pretConstant.month$sd)*sqrt(12))
-A.sharp_ratio[3]<-(mean(pretEquity.month$ret)*12-0.03)/(mean(pretEquity.month$sd)*sqrt(12))
+A.volatility[1]<-mean(pret.month$sd,na.rm = TRUE)*sqrt(12)
+A.volatility[2]<-mean(pretConstant.month$sd,na.rm = TRUE)*sqrt(12)
+A.volatility[3]<-mean(pretEquity.month$sd,na.rm = TRUE)*sqrt(12)
+A.sharp_ratio[1]<-(mean(pret.month$ret)*12-0.03)/(mean(pret.month$sd,na.rm = TRUE)*sqrt(12))
+A.sharp_ratio[2]<-(mean(pretConstant.month$ret)*12-0.03)/(mean(pretConstant.month$sd,na.rm = TRUE)*sqrt(12))
+A.sharp_ratio[3]<-(mean(pretEquity.month$ret)*12-0.03)/(mean(pretEquity.month$sd,na.rm = TRUE)*sqrt(12))
 
 
 a<-data.frame(A.return=A.return,
