@@ -134,42 +134,7 @@ print(dm.test(residuals(fcast_Arima),residuals(filter.onestep)))
 The Diebold-Mariano test gives similar result as above -- both ARIMA model and exponential filter model are significantly better than naive model, whereas exponential filter model beats ARIMA model but p value is not significant.
 
 
-```{r}
-#AGG ETF
-AGG<-read.csv("AGG.csv")
-Return<-diff(log(AGG$Adj.Close))
-Date<-AGG[-1,1]
-bond_return.ts <- zoo(Return,as.Date(Date))
-bond_return.valid <- window(bond_return.ts,start=as.Date("2016-01-01"),end = as.Date("2018-12-04"))
-tail(bond_return.valid)
-#compare variance of IEO and bond
-IEO_var<-window(ret^2,start=as.Date("2016-01-01"),end = as.Date("2018-12-04"))
-bond_var<-bond_return.valid^2
-plot(bond_var)
-#Plot both varainces
-ggplot() + 
-  geom_line(aes(y = IEO_var, x = time(IEO_var), col = "IEO's variance"))+
-  geom_line(aes(y = bond_var, x = time(bond_var), col = "Bond's variance")) +
-  labs(title ="Bond's varaince vs IEO's varaince", x = "Time", y = "Daily Variance")+
-  theme(legend.position = "bottom")
-# The volatility of bond respecting to IEO is very small
 
-```
-
-```{r}
-#Aggregation Function
-monagg <- function(data)
-{
-  temp <- tail(data,n=1)
-  m <- nrow(data)
-  # these are the three lines to really pay attention to
-  temp$ret <- prod(1+data$V1)-1
-  temp$m <- m # number of days
-  temp$sd<-sd(data$V1)
-  # return monthly record
-  temp
-}
-```
 #Volatility forecast using GARCH(1,1)
 As summarized from the previous part of the project, stock price and stock return are hard to forecast because most of the times they are random walk. However, the volatility of stock return presents a strong correlation through time and can be used to forecast the future performance of stock. The GARCH models are good for stock volatility foracasting because it incorporates long historical data with current data added every forecast period. The following chunk shows the volatility forecast of the IEO ETF using GARCH(1,1).
 ```{r}
@@ -201,7 +166,49 @@ ggplot() +
   labs(title ="Garch fitted volatility vs actual volatility", x = "Time", y = "Daily Volatility")+
   theme(legend.position = "bottom")
 ```
+
 As shown above, we partitioned the daily return data of IEO into training and validation set. The split point is 2015-12-31 with lengths of training/validation set around 3:1. We used the training set to train the GARCH(1,1) model and applied the model to forecast the volatility in the validation set. The graph shows the comparason of the actual daily volatility and the forecast volatility of IEO in the validation set. As we can see, the GARCH(1,1) model can nicely capture the trend of the volatility with much smoother curve compared with the actual one. The smoothing effect is because GARCH(1,1) incorporates more historical data hence less exposed to sharp changes in the current data. We believe this is a rather good feature for our strategy because it helps us avoid the sharp change in our asset weight only due to temporary fluctuation, so we can focus more on the real shift in the volatility regime of our assets.
+
+# U.S. Aggregate Bond ETF (AGG)
+```{r}
+#AGG ETF
+AGG<-read.csv("AGG.csv")
+Return<-diff(log(AGG$Adj.Close))
+Date<-AGG[-1,1]
+bond_return.ts <- zoo(Return,as.Date(Date))
+bond_return.valid <- window(bond_return.ts,start=as.Date("2016-01-01"),end = as.Date("2018-12-04"))
+tail(bond_return.valid)
+#compare variance of IEO and bond
+IEO_var<-window(ret^2,start=as.Date("2016-01-01"),end = as.Date("2018-12-04"))
+bond_var<-bond_return.valid^2
+plot(bond_var)
+#Plot both varainces
+ggplot() + 
+  geom_line(aes(y = IEO_var, x = time(IEO_var), col = "IEO's variance"))+
+  geom_line(aes(y = bond_var, x = time(bond_var), col = "Bond's variance")) +
+  labs(title ="Bond's varaince vs IEO's varaince", x = "Time", y = "Daily Variance")+
+  theme(legend.position = "bottom")
+# The volatility of bond respecting to IEO is very small
+```
+
+The dataset we used here is iShares Core U.S. Aggregate Bond ETF (AGG). We generated return time series from AGG by measured the difference between actual log returns and the mean log return, and partition the series started from 2016-01-01 to 2018-12-04, which is the same as IEO validation set. Then we squared log returns to get variances for IEO and AGG from this time period. We plot both variances and found out that IEO's variance is lower than 0.002 at most time period, and AGG's is lower than 2e-5. Thus, the volatility of bond respecting to IEO is very small.
+
+```{r}
+#Aggregation Function
+monagg <- function(data)
+{
+  temp <- tail(data,n=1)
+  m <- nrow(data)
+  # these are the three lines to really pay attention to
+  temp$ret <- prod(1+data$V1)-1
+  temp$m <- m # number of days
+  temp$sd<-sd(data$V1)
+  # return monthly record
+  temp
+}
+```
+
+# Dynamic Strategy
 ```{r}
 #Build Strategy:
 #set for 1 percent daily volatility target
@@ -294,9 +301,7 @@ a<-data.frame(A.return=A.return,
 print(a)
 
 ```
-Above is a graph shows out of sample one step ahead GARCH volatility forecast.
 
-# Dynamic Strategy
 We built a portfolio using two ETF: iShares US Oil & Gas Explor & Prod ETF(IEO), and iShares Core U.S. Aggregate Bond ETF(AGG).
 In this strategy, GARCH fitted volatility was used as an estimate of next day's volatility to adjust the daily weight. We set 1 percent as the daily volatility target. To be more specific, the weight of the IEO ETF was calculated using the ratio of the volatility target to the out of sample one step ahead GARCH volatility estimated value. And the weights of the assets was rebalanced on a daily frequency. Additionally, we added a constraint that the maximum weight of IEO is one, which means short is not allowed in this portfolio.
 
