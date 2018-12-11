@@ -1,11 +1,12 @@
 ---
   title: "Final Project"
+  author: "Chenxi Du, Chuyan Luo, Danyao Yu, Hang Xu, Siqi Zhang, Yiyao Zhou, Yuwei Lin"
 output: html_document
 ---
-  ---
-  title: "Final Project"
-output: html_document
----
+
+For this project, we would like to explore more about the volatility forecasting area and try to apply it to real world.
+
+# Looking at the data
 ```{r}
 library(forecast)
 library(zoo)
@@ -26,14 +27,21 @@ plot(ret^2)
 #examine pacf of IEO time series, significant correlation with one lag. 
 #Highly likely to be random walk and need further test for unit root.
 Pacf(IEO.ts)
-#examine volatility of return, which is persistent and gradually decay
+#examine volatility of return, the result is persistent and gradually decay
 vol<-sqrt(ret^2)
 Pacf(vol)
+
 #create training and validation set
 train.ts <- window(IEO.ts, end = "2015-12-31")
 valid.ts <- window(IEO.ts, start = "2016-01-01")
 ntrain <- length(train.ts)
 nvalid <- length(valid.ts)
+```
+First we looked at the pattern of price and return. Price time series has a slightly upward trend and the Pacf indicate that it is likely that the data will have unit root.
+
+# Some models to forecast 
+```{r}
+# Arima Model
 
 #DF Test on Whole Data Set, Fail to reject null hypothesis → unit root 
 df.test <- ur.df(IEO.ts,type="trend",selectlags="BIC")
@@ -44,40 +52,43 @@ teststat <- sum@teststat[3]
 critical <- sum@cval[3,2]
 abs(critical)<abs(teststat) #Not reject null, series has unit root
 
-# Build Arima Model based on "bic" using training data set
+# Building the model
 ArimaMod <- auto.arima(train.ts, d=1, ic="bic", seasonal = FALSE)
 summary(ArimaMod) #give us (0,1,0), that is a random walk
 fcast_Arima<- Arima(valid.ts, model = ArimaMod) #one step ahead forecasting
-#make fitted value both in training and validation time series data;preparing for ploting
+# make fitted value both in training and validation time series data;preparing for ploting
 fcast_fitted_Arima.ts <- xts(fcast_Arima$fitted, as.Date(IEO$Date[(ntrain+1):(ntrain+nvalid)]))
 mod_fitted_Arima.ts <- xts(ArimaMod$fitted, as.Date(IEO$Date[1:ntrain]))
-#examine model's accuracy
+# examine model's accuracy
 print(accuracy(fcast_Arima$fitted, valid.ts))
 
-#Plot, the fitted values highly coincide with actual value due to one step ahead process
+# Plot, the fitted values highly coincide with actual value due to one step ahead process
 plot(IEO.ts, ylab="Price",xlab="Time",bty="l",main="Forecast of IEO Price(Arima(0,1,0))", flty=2)
 lines(mod_fitted_Arima.ts, lwd=0.5,col="aquamarine3")
 lines(fcast_fitted_Arima.ts, lwd=0.5,col="azure3")
-
 ```
+We further examined the data and found that the time series has unit root. Based on the results, we set d=1 in the ARIMA model. The auto.arima function gives us ARIMA(0,1,0), which is a random walk.
 ```{r}
 # Exponential Filter Forecast
-# First, estimate addiive trend filter
+
+# First, estimate additive trend filter
 filter.mod <- ets(train.ts, model = "AAN")
 # Now, build forecasts for validation periods (uses no data there)
 filter.pred <- forecast(filter.mod, h = nvalid)
 plot(filter.pred)
 # Now, build one step ahead forecasts for validation data, using estimated model
 filter.onestep <- ets(valid.ts, model = filter.mod)
-#make it time series through xts
+# make it time series through xts
 filter.onestep.fitted.ts <- xts(filter.onestep$fitted, as.Date(IEO$Date[(ntrain + 1):(ntrain + nvalid)]))
 plot(IEO.ts, main = "Filter Forecast (with trend)")
 lines(filter.onestep.fitted.ts,lwd = 1, col="azure3", lty = 2)
 # check accuracy
 print(accuracy(filter.onestep$fitted, valid.ts))
 ```
-
+For the exponential filter, we chose the model with additive error, additive trend and no seasonality. We tried both multiperiod forecasting and one-step ahead forecasting for this model. It is obvious that one-step ahead forecasting does much better.
 ```{r}
+# Naive Model
+
 # Use Mean of full data set as Naive Forecast
 nALL <- length(IEO.ts)
 naive.valid <- rep(mean(IEO.ts),nvalid)
@@ -86,6 +97,11 @@ naive.ts<-xts(naive.valid, as.Date(IEO$Date[(ntrain + 1):(ntrain + nvalid)]))
 plot(IEO.ts)
 lines(naive.ts,col="blue") 
 
+```
+
+
+# Model Comparison
+```{r}
 # RMSE of Naive, Arima and Filter
 naive.valid.res <- valid.ts-naive.valid
 arima.valid.res<-residuals(fcast_Arima)
@@ -103,9 +119,8 @@ a<-data.frame(V.rmse=V.rmse,
               Vmae=V.mae,
            row.names = c("Naive", "Arima","Filter"))
 print(a)
-
 ```
-
+The result shows that the exponential fitler model does the best with smallest RMSE and MAE due to one step ahead process. However, the RMSE and MAE for arima model is very close to it. Naive model is least accurate.
 ```{r}
 # perform some Diebold/Mariano tests
 print("Diebold/Mariano ARIMA versus Naive")
@@ -117,6 +132,7 @@ print(dm.test(residuals(filter.onestep),naive.valid.res))
 print("Diebold/Mariano ARIMA versus Exponential Filter")
 print(dm.test(residuals(fcast_Arima),residuals(filter.onestep)))
 ```
+The Diebold-Mariano test gives similar result as above -- both ARIMA model and exponential filter model are significantly better than naive model, whereas exponential filter model beats ARIMA model but p value is not significant.
 
 
 ```{r}
@@ -276,8 +292,8 @@ a<-data.frame(A.return=A.return,
 print(a)
 
 ```
-
 Above is a graph shows out of sample one step ahead GARCH volatility forecast.
+
 # Dynamic Strategy
 We built a portfolio using two ETF: iShares US Oil & Gas Explor & Prod ETF(IEO), and iShares Core U.S. Aggregate Bond ETF(AGG).
 In this strategy, GARCH fitted volatility was used as an estimate of next day's volatility to adjust the daily weight. We set 1 percent as the daily volatility target. To be more specific, the weight of the IEO ETF was calculated using the ratio of the volatility target to the out of sample one step ahead GARCH volatility estimated value. And the weights of the assets was rebalanced on a daily frequency. Additionally, we added a constraint that the maximum weight of IEO is one, which means short is not allowed in this portfolio.
