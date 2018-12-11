@@ -7,7 +7,7 @@ output: html_document
 For this project, we would like to explore more about the volatility forecasting area and try to apply it to real world.
 
 # Looking at the data
-```{r}
+```{r,warning=FALSE}
 library(forecast)
 library(zoo)
 library(xts)
@@ -24,7 +24,7 @@ plot(IEO.ts)
 #create return and variance
 ret<-diff(log(IEO.ts))
 plot(ret^2)
-#examine pacf of IEO time series, significant correlation with one lag. 
+#examine pacf of IEO time series
 #Highly likely to be random walk and need further test for unit root.
 Pacf(IEO.ts)
 #examine volatility of return, the result is persistent and gradually decay
@@ -37,7 +37,9 @@ valid.ts <- window(IEO.ts, start = "2016-01-01")
 ntrain <- length(train.ts)
 nvalid <- length(valid.ts)
 ```
-First we looked at the pattern of price and return. Price time series has a slightly upward trend and the Pacf indicate that it is likely that the data will have unit root.
+The data we used is the daily price of IEO, an oil exploitation ETF, from May 5, 2006. After making it into a time series, we first looked at the pattern of adjusted closing price and volatility of its return. Price time series has a slightly upward trend with much volatility, especially in late 2008. 
+
+The graph of Pacf for price time series suggests significant correlation with one lag. Therefore it is highly likely that the time series conforms random walk and we will need to further test for unit root. On the other hand, Pacf for volatility of return is persistent and decays gradually.
 
 # Some models to forecast 
 ```{r}
@@ -67,11 +69,15 @@ plot(IEO.ts, ylab="Price",xlab="Time",bty="l",main="Forecast of IEO Price(Arima(
 lines(mod_fitted_Arima.ts, lwd=0.5,col="aquamarine3")
 lines(fcast_fitted_Arima.ts, lwd=0.5,col="azure3")
 ```
-We further examined the data and found that the time series has unit root. Based on the results, we set d=1 in the ARIMA model. The auto.arima function gives us ARIMA(0,1,0), which is a random walk.
+
+We further examined the data and found that the time series has a unit root process. Since there is a slight trend with the time series, we used dickey fuller test 3 (null: random walk + drift) and set critical value at 5 percent. The test result failed to reject null hypothesis at 95% level, thus the data is random walk. 
+
+Therefore we set d=1 in the ARIMA model and use autoarima function to get the best Model which is ARIMA(0,1,0). Then, we compute one-step ahead forecast on validation set and get the RMSE for both trainning and validation set. 
+
 ```{r}
 # Exponential Filter Forecast
 
-# First, estimate additive trend filter
+# Building the model
 filter.mod <- ets(train.ts, model = "AAN")
 # Now, build forecasts for validation periods (uses no data there)
 filter.pred <- forecast(filter.mod, h = nvalid)
@@ -82,10 +88,16 @@ filter.onestep <- ets(valid.ts, model = filter.mod)
 filter.onestep.fitted.ts <- xts(filter.onestep$fitted, as.Date(IEO$Date[(ntrain + 1):(ntrain + nvalid)]))
 plot(IEO.ts, main = "Filter Forecast (with trend)")
 lines(filter.onestep.fitted.ts,lwd = 1, col="azure3", lty = 2)
+
 # check accuracy
+print(accuracy(filter.pred$fitted, valid.ts))
 print(accuracy(filter.onestep$fitted, valid.ts))
 ```
-For the exponential filter, we chose the model with additive error, additive trend and no seasonality. We tried both multiperiod forecasting and one-step ahead forecasting for this model. It is obvious that one-step ahead forecasting does much better.
+
+For the exponential filter, we trained the model with additive error, additive trend and no seasonality, which is in line with what we observed from the price pattern. 
+
+We tried both multiperiod forecasting and one-step ahead forecasting for this model. Multiperiod forecasting does not use data in validation period while one-step ahead forecasting uses the model we estimated from the training period. It is easy to observe from the plots that the fitted values of one-step ahead forecast fits better to actual value. This can also be proved by the stats. RMSE for multiperiod forecasting is 18.1382, while RMSE for one-step ahead forecast is only 0.9930.
+
 ```{r}
 # Naive Model
 
@@ -93,11 +105,12 @@ For the exponential filter, we chose the model with additive error, additive tre
 nALL <- length(IEO.ts)
 naive.valid <- rep(mean(IEO.ts),nvalid)
 naive.ts<-xts(naive.valid, as.Date(IEO$Date[(ntrain + 1):(ntrain + nvalid)]))
-#Plot
+# Plot
 plot(IEO.ts)
 lines(naive.ts,col="blue") 
 ```
 
+For naïve forecast, we use the mean of the full dataset to forecast the validation period.  The training dataset contains the time series from 5/5/2006 to 12/31/2015, and valid data start from 1/1/2016 to the end. Our purpose is to use naïve forecast as a benchmark to compare with Arima forecast and exponential forecast. The result shows that the ETF of oil price is a random walk without seasonality and trends.
 
 # Model Comparison
 ```{r}
@@ -119,19 +132,22 @@ a<-data.frame(V.rmse=V.rmse,
               row.names = c("Naive", "Arima","Filter"))
 print(a)
 ```
-The result shows that the exponential fitler model does the best with smallest RMSE and MAE due to one step ahead process. However, the RMSE and MAE for arima model is very close to it. Naive model is least accurate.
+
+Having built three forecasting models, we can now compare them and evaluate their performance. The result shows that the exponential fitler model does the best with smallest RMSE(0.9930145) and MAE(0.7474804) due to one step ahead process. However, ARIMA model also does a good job with very close RMSE(0.9939469) and MAE(0.7486390). It's not surprising to see that naïve model has largest RMSE and MAE.
+
 ```{r}
 # perform some Diebold/Mariano tests
-print("Diebold/Mariano ARIMA versus Naive")
+print("Diebold/Mariano test: ARIMA versus Naive")
 print(dm.test(residuals(fcast_Arima),naive.valid.res))
 
-print("Diebold/Mariano Exponential Filter versus Naive")
+print("Diebold/Mariano test: Exponential Filter versus Naive")
 print(dm.test(residuals(filter.onestep),naive.valid.res))
 
-print("Diebold/Mariano ARIMA versus Exponential Filter")
+print("Diebold/Mariano test: ARIMA versus Exponential Filter")
 print(dm.test(residuals(fcast_Arima),residuals(filter.onestep)))
 ```
-The Diebold-Mariano test gives similar result as above -- both ARIMA model and exponential filter model are significantly better than naive model, whereas exponential filter model beats ARIMA model but p value is not significant.
+
+Then, we used Diebold-Mariano test to deeply evaluate each model, which gives similar result as above -- both ARIMA model and exponential filter model are significantly better than naive model with p value smaller than 2.2e-16, whereas exponential filter model beats ARIMA model but p value is not significant (0.1942).
 
 
 
