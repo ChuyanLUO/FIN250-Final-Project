@@ -96,7 +96,6 @@ naive.ts<-xts(naive.valid, as.Date(IEO$Date[(ntrain + 1):(ntrain + nvalid)]))
 #Plot
 plot(IEO.ts)
 lines(naive.ts,col="blue") 
-
 ```
 
 
@@ -116,8 +115,8 @@ V.mae[2]<-mean(abs(arima.valid.res))
 V.mae[3]<-mean(abs(filter.valid.res))
 # Compare RMSE for three models 
 a<-data.frame(V.rmse=V.rmse,
-              Vmae=V.mae,
-           row.names = c("Naive", "Arima","Filter"))
+              V.mae=V.mae,
+              row.names = c("Naive", "Arima","Filter"))
 print(a)
 ```
 The result shows that the exponential fitler model does the best with smallest RMSE and MAE due to one step ahead process. However, the RMSE and MAE for arima model is very close to it. Naive model is least accurate.
