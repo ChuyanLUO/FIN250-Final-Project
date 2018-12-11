@@ -12,6 +12,9 @@ library(zoo)
 library(xts)
 library(urca)
 library(ggplot2)
+library(rugarch)
+library(plyr)
+
 #IEO is an oil exploitation ETF, frequently trading
 IEO<-read.csv("IEO.csv")
 #Make IEO time series
@@ -73,6 +76,7 @@ lines(filter.onestep.fitted.ts,lwd = 1, col="azure3", lty = 2)
 # check accuracy
 print(accuracy(filter.onestep$fitted, valid.ts))
 ```
+
 ```{r}
 # Use Mean of full data set as Naive Forecast
 nALL <- length(IEO.ts)
